@@ -1,16 +1,13 @@
 import os
 import json
-import ffmpeg
 import librosa
 import argparse
-import soundfile
 import subprocess
 import numpy as np
 import pandas as pd
 
 from glob import glob
 from tqdm import tqdm
-from PIL import Image
 from natsort import natsorted
 
 class Stage1Preprocessor():
@@ -25,7 +22,7 @@ class Stage1Preprocessor():
         parser.add_argument('--audio_sample_rate', type=int, default=48000)
         parser.add_argument('--clip_duration', type=float, default=5.0)
         # parser.add_argument('--offset_from_event', type=float, default=0.5)
-        parser.add_argument('--image_size', nargs='+', type=int, default=[])
+        parser.add_argument('--image_size', nargs='+', type=int, default=[320, 240])
         parser.add_argument('--rms_window_size', type=int, default=512)
         parser.add_argument('--rms_scale_factor', type=float, default=2.0)
         self.args = parser.parse_args()
@@ -194,7 +191,6 @@ class Stage1Preprocessor():
             # 청크 나누기 및 저장
             output_dir = os.path.join(self.output_base_path, path_v.split(os.sep)[-1].split('_')[0])
             self.process_chunks(output_dir, path_v)
-            # break
 
 if __name__=="__main__":
     PP = Stage1Preprocessor()

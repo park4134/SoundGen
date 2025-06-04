@@ -3,3 +3,6 @@
 
 # dev file
 dev.ipynb
+
+# cache file
+*/__pycache__
