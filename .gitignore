@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ignore data
 
 /data
@@ -5,3 +6,13 @@
 # ignore image
 
 *.jpg
+=======
+# data directory
+/data/greatest_hits
+
+# dev file
+dev.ipynb
+
+# cache file
+*/__pycache__
+>>>>>>> main
