@@ -246,7 +246,7 @@ class Preprocessor():
             self.resampled_audio = self.resample_audio(wav_path=path_a, audio_sample_rate=self.args.audio_sample_rate)
 
             # 청크 나누기 및 저장
-            output_dir = os.path.join(self.output_base_path, path_v.split(os.sep)[-1].split('_')[0])
+            output_dir = os.path.join(self.output_base_path)
             self.process_chunks(output_dir, path_v)
 
 if __name__=="__main__":
