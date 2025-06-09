@@ -217,7 +217,7 @@ class Preprocessor():
             self.get_rmsNonset(chunk_start_time, chunk_end_time)
             
             # 출력 경로 준비
-            chunk_dir = os.path.join(output_dir, f'chunk_{i}', path_v.split(os.sep)[-1].split('_')[0])
+            chunk_dir = os.path.join(output_dir, f'chunk_{i}')
             frame_dir = os.path.join(chunk_dir, 'frames')
             os.makedirs(frame_dir, exist_ok=True)
 
@@ -246,7 +246,7 @@ class Preprocessor():
             self.resampled_audio = self.resample_audio(wav_path=path_a, audio_sample_rate=self.args.audio_sample_rate)
 
             # 청크 나누기 및 저장
-            output_dir = os.path.join(self.output_base_path)
+            output_dir = os.path.join(self.output_base_path, path_v.split(os.sep)[-1].split('_')[0])
             self.process_chunks(output_dir, path_v)
 
 if __name__=="__main__":
