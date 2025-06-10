@@ -16,10 +16,10 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         split_file_path,
         chunk_length_sec=5.0,
         image_size=(224,224),
-        audio_file_suffix=".resampled.wav",
-        onset_file_suffix=".onset.npy",
-        metadata_file_suffix=".metadata.json",
-        peak_file_suffix=".rms.npy",
+        audio_file_suffix="resampled.wav",
+        onset_file_suffix="onset.npy",
+        metadata_file_suffix="metadata.json",
+        peak_file_suffix="peak.npy",
         frame_file_suffix=".png",
         transform_=None,
         use_peak=True,        
@@ -53,22 +53,22 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
             chunk_dirs = natsorted(glob(os.path.join(video_base_dir, "chunk_*")))
 
             for chunk_dir in chunk_dirs:
-                chunk_subdir = os.path.join(chunk_dir, video_name)
-                if not os.path.isdir(chunk_subdir):
-                    continue
-                frames_dir = os.path.join(chunk_subdir, "frames")
+                # chunk_subdir = os.path.join(chunk_dir, video_name)
+                # if not os.path.isdir(chunk_subdir):
+                #     continue
+                frames_dir = os.path.join(chunk_dir, "frames")
                 frames = natsorted(glob(os.path.join(frames_dir, f"*{self.frame_file_suffix}")))
                 if not frames:
                     continue
                     
-                onset_path = os.path.join(chunk_subdir, video_name + self.onset_file_suffix)
-                meta_path = os.path.join(chunk_subdir, video_name + self.metadata_file_suffix)
-                peak_path = os.path.join(chunk_subdir, video_name + self.peak_file_suffix)
-                audio_path = os.path.join(chunk_subdir, video_name + self.audio_file_suffix)
+                onset_path = os.path.join(chunk_dir, self.onset_file_suffix)
+                meta_path = os.path.join(chunk_dir, self.metadata_file_suffix)
+                peak_path = os.path.join(chunk_dir, self.peak_file_suffix)
+                audio_path = os.path.join(chunk_dir, self.audio_file_suffix)
                 
                 self.samples.append({
                     "video_name": video_name,
-                    "chunk_dir": chunk_subdir,
+                    "chunk_dir": chunk_dir,
                     "frames": frames,
                     "onset_path": onset_path,
                     "meta_path": meta_path,
@@ -102,9 +102,9 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         if os.path.exists(sample["meta_path"]):
             with open(sample["meta_path"], "r") as f:
                 meta = json.load(f)
-            text = meta.get("event_text", "")
-            start_time = meta.get("chunk_start", 0.0)
-            end_time = meta.get("chunk_end", 0.0)
+            text = meta.get("prompt", "")
+            start_time = meta.get("seconds_start", 0.0)
+            end_time = meta.get("seconds_total", 0.0)
 
         wav = None
         if os.path.exists(sample["audio_path"]):
@@ -126,7 +126,7 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
 
 if __name__ == "__main__":
     dataset = GreatestHitsDataset(
-        root_dir="/mnt/HDD2/GreatestHits/preprocessed_15_5.0_(320,240)_48000",
+        root_dir="/mnt/HDD2/GreatestHits/preprocessed_15_5.0_(320, 240)_48000",
         split_file_path="/mnt/HDD2/GreatestHits/data/train.txt",
         chunk_length_sec=5.0,
         image_size=(320, 240),
