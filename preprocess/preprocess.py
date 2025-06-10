@@ -23,7 +23,7 @@ class Preprocessor():
         parser.add_argument('--audio_sample_rate', type=int, default=48000)
         parser.add_argument('--clip_duration', type=float, default=5.0)
         # parser.add_argument('--offset_from_event', type=float, default=0.5)
-        parser.add_argument('--image_size', nargs='+', type=int, default=[320, 240])
+        parser.add_argument('--image_size', nargs='+', type=int, default=(320, 240))
         parser.add_argument('--rms_window_size', type=int, default=512)
         parser.add_argument('--rms_scale_factor', type=float, default=2.0)
         parser.add_argument('--prompt_mode', type=str, default='list')
@@ -145,7 +145,9 @@ class Preprocessor():
                     margin_rms_chunk = rms_full[start_idx:end_idx]
                     local_max_idx = np.argmax(margin_rms_chunk)
                     max_pos = start_idx + local_max_idx
-                    self.rms_array[max_pos] = rms_full[max_pos]
+                    # self.rms_array[max_pos] = rms_full[max_pos] # rms와 onset인덱스가 안맞음
+                    self.rms_array[event_sample_idx] = rms_full[event_sample_idx]
+
     
     def get_frames(self, frame_dir, chunk_start_time, path_v):
         frame_output_pattern = os.path.join(frame_dir, 'frame_%05d.png')
