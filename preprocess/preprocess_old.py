@@ -10,7 +10,6 @@ import soundfile as sf
 from glob import glob
 from tqdm import tqdm
 from natsort import natsorted
-from data_utils import RMS
 
 class Preprocessor():
     def __init__(self):
@@ -25,9 +24,7 @@ class Preprocessor():
         parser.add_argument('--clip_duration', type=float, default=5.0)
         # parser.add_argument('--offset_from_event', type=float, default=0.5)
         parser.add_argument('--image_size', nargs='+', type=int, default=(320, 240))
-        # parser.add_argument('--rms_window_size', type=int, default=512)
-        parser.add_argument('--rms_nframes', type=int, default=512)
-        parser.add_argument('--rms_hop', type=int, default=128)
+        parser.add_argument('--rms_window_size', type=int, default=512)
         parser.add_argument('--rms_scale_factor', type=float, default=2.0)
         parser.add_argument('--prompt_mode', type=str, default='list')
         self.args = parser.parse_args()
@@ -120,67 +117,36 @@ class Preprocessor():
 
         return audio_data
     
-    # def get_rmsNonset(self, chunk_start_time, chunk_end_time):
-    #     self.onset_array = np.zeros_like(self.audio_chunk, dtype=np.float32)
-
-    #     rms_values = librosa.feature.rms(y=self.audio_chunk, frame_length=self.args.rms_window_size, hop_length=self.args.rms_window_size).flatten()
-    #     rms_full = np.repeat(rms_values, self.args.rms_window_size)
-    #     rms_full = rms_full[:len(self.audio_chunk)]
-
-    #     # 이벤트 처리
-    #     self.anno_in_chunk = self.df_anno[
-    #         (self.df_anno['event_time'] >= chunk_start_time) &
-    #         (self.df_anno['event_time'] < chunk_end_time)
-    #         ]
-        
-    #     self.rms_array = np.zeros_like(self.audio_chunk, dtype=np.float32)
-    #     margin_samples = 100
-
-    #     if len(self.anno_in_chunk) > 0:
-    #         for event_time in self.anno_in_chunk['event_time']:
-    #             event_sample_idx = int((event_time - chunk_start_time) * self.args.audio_sample_rate)
-    #             start_idx = max(0, event_sample_idx - margin_samples)
-    #             end_idx = min(len(self.audio_chunk), event_sample_idx + margin_samples + 1)
-
-    #             self.onset_array[event_sample_idx] = 1.0
-
-    #             if start_idx < end_idx:
-    #                 margin_rms_chunk = rms_full[start_idx:end_idx]
-    #                 local_max_idx = np.argmax(margin_rms_chunk)
-    #                 max_pos = start_idx + local_max_idx
-    #                 # self.rms_array[max_pos] = rms_full[max_pos] # rms와 onset인덱스가 안맞음
-    #                 self.rms_array[event_sample_idx] = rms_full[event_sample_idx]
-
-
-
-
-    # 기존 get_rmsNonset를 대체
     def get_rmsNonset(self, chunk_start_time, chunk_end_time):
         self.onset_array = np.zeros_like(self.audio_chunk, dtype=np.float32)
 
-        # ✅ 1. 프레임 단위 RMS 계산 (논문 방식)
-        rms_frame = RMS.get_rms(
-            waveform=self.audio_chunk,
-            nframes=self.args.rms_nframes,
-            hop=self.args.rms_hop
-        )
+        rms_values = librosa.feature.rms(y=self.audio_chunk, frame_length=self.args.rms_window_size, hop_length=self.args.rms_window_size).flatten()
+        rms_full = np.repeat(rms_values, self.args.rms_window_size)
+        rms_full = rms_full[:len(self.audio_chunk)]
 
-        # ✅ 2. zero-phased filtering
-        rms_filtered = RMS.zero_phased_filter(rms_frame)
-
-        # ✅ 3. 저장
-        self.rms_array = rms_filtered  # frame-level RMS 그대로 저장
-
-        # ✅ 4. Onset 처리 (샘플 단위)
+        # 이벤트 처리
         self.anno_in_chunk = self.df_anno[
             (self.df_anno['event_time'] >= chunk_start_time) &
             (self.df_anno['event_time'] < chunk_end_time)
-        ]
+            ]
+        
+        self.rms_array = np.zeros_like(self.audio_chunk, dtype=np.float32)
+        margin_samples = 100
 
-        for event_time in self.anno_in_chunk['event_time']:
-            event_sample_idx = int((event_time - chunk_start_time) * self.args.audio_sample_rate)
-            if 0 <= event_sample_idx < len(self.onset_array):
+        if len(self.anno_in_chunk) > 0:
+            for event_time in self.anno_in_chunk['event_time']:
+                event_sample_idx = int((event_time - chunk_start_time) * self.args.audio_sample_rate)
+                start_idx = max(0, event_sample_idx - margin_samples)
+                end_idx = min(len(self.audio_chunk), event_sample_idx + margin_samples + 1)
+
                 self.onset_array[event_sample_idx] = 1.0
+
+                if start_idx < end_idx:
+                    margin_rms_chunk = rms_full[start_idx:end_idx]
+                    local_max_idx = np.argmax(margin_rms_chunk)
+                    max_pos = start_idx + local_max_idx
+                    # self.rms_array[max_pos] = rms_full[max_pos] # rms와 onset인덱스가 안맞음
+                    self.rms_array[event_sample_idx] = rms_full[event_sample_idx]
 
     
     def get_frames(self, frame_dir, chunk_start_time, path_v):
@@ -192,7 +158,6 @@ class Preprocessor():
             f'\"{frame_output_pattern}\" -hide_banner -loglevel error'
         )
         os.system(ffmpeg_cmd)
-        
 
     def get_prompt(self, frequency="multiple times"):
         df_clean = self.df_anno[['event', 'material']].dropna().drop_duplicates()
@@ -269,7 +234,7 @@ class Preprocessor():
             with open(os.path.join(chunk_dir, 'metadata.json'), "w") as f:
                 json.dump(metadata, f, indent=4)
 
-            np.save(os.path.join(chunk_dir, 'rms.npy'), self.rms_array) # RMS 값 저장
+            np.save(os.path.join(chunk_dir, 'peak.npy'), self.rms_array) # RMS 값 저장
             sf.write(os.path.join(chunk_dir, 'resampled.wav'), self.audio_chunk, self.args.audio_sample_rate) # Resampled audio 저장
             np.save(os.path.join(chunk_dir, 'onset.npy'), self.onset_array) # Onset 저장
 

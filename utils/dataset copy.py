@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 import torchvision.transforms as transforms
 from utils.opticalflow import extract_optical_flow_farneback_drumstick
 from utils.opticalflow import preprocess_optical_flow
@@ -11,7 +10,7 @@ import numpy as np
 import json
 import torchaudio
 import librosa
-from preprocess.data_utils import RMS
+
 
 class GreatestHitsDataset(torch.utils.data.Dataset):
     def __init__(
@@ -24,12 +23,12 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         audio_file_suffix="resampled.wav",
         onset_file_suffix="onset.npy",
         metadata_file_suffix="metadata.json",
-        rms_file_suffix="rms.npy",
+        peak_file_suffix="rms.npy",
         frame_file_suffix=".png",
         transform_=None,
-        use_rms=True,        
-        n_rms_classes=64,
-        mu_rms=255,
+        use_peak=True,        
+        n_peak_classes=64,
+        mu_peak=255,
         rms_num_bins = 64,
         rms_min = 0.01
     ):
@@ -39,13 +38,11 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         self.audio_file_suffix = audio_file_suffix
         self.onset_file_suffix = onset_file_suffix
         self.metadata_file_suffix = metadata_file_suffix
-        self.rms_file_suffix = rms_file_suffix
+        self.peak_file_suffix = peak_file_suffix
         self.frame_file_suffix = frame_file_suffix
-        self.use_rms = use_rms
-        self.n_rms_classes = n_rms_classes
-        self.mu_rms = mu_rms
-        self.rms_num_bins = rms_num_bins
-        self.rms_min = rms_min
+        self.use_peak = use_peak
+        self.n_peak_classes = n_peak_classes
+        self.mu_peak = mu_peak
         self.target_frame_len = int(self.chunk_length_sec * image_fps)
         self.flow_hsv_lower = np.array([0, 0, 0])
         self.flow_hsv_upper = np.array([255, 255, 255])
@@ -81,7 +78,7 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
                     
                 onset_path = os.path.join(chunk_dir, self.onset_file_suffix)
                 meta_path = os.path.join(chunk_dir, self.metadata_file_suffix)
-                rms_path = os.path.join(chunk_dir, self.rms_file_suffix)
+                peak_path = os.path.join(chunk_dir, self.peak_file_suffix)
                 audio_path = os.path.join(chunk_dir, self.audio_file_suffix)
                 
                 self.samples.append({
@@ -90,7 +87,7 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
                     "frames": frames,
                     "onset_path": onset_path,
                     "meta_path": meta_path,
-                    "rms_path": rms_path,
+                    "peak_path": peak_path,
                     "audio_path": audio_path,
                 })
                 
@@ -126,40 +123,32 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         flow_tensor = torch.from_numpy(flow_np).permute(0, 3, 1, 2).float()  # (T, 2, H, W)
         
         onset_time_array = np.zeros(10, dtype=np.float32)
-         
+        peak_array = np.zeros(10, dtype=np.float32)     
         
         onset = None
         if os.path.exists(sample["onset_path"]):
             onset = np.load(sample["onset_path"])
 
-        rms = None
-        if self.use_rms and os.path.exists(sample["rms_path"]):
-            rms = np.load(sample["rms_path"])
-
+        peak = None
+        if self.use_peak and os.path.exists(sample["peak_path"]):
+            peak = np.load(sample["peak_path"])
             
             
-        if onset is not None:
+        if onset is not None and peak is not None:
             onset_indices = np.where(onset > 0)[0]
-            # print('len onset',len(onset))
             num_onsets = min(10, len(onset_indices))
             
             for i in range(num_onsets):
                 idx = onset_indices[i]
                 time_sec = idx / 240000
                 onset_time_array[i] = time_sec
- 
+                peak_array[i] = peak[idx]  # same index
 
-        # rms 분류 레이블 생성
-        if self.use_rms and os.path.exists(sample["rms_path"]):
-            
-            # µ-law 기반 클래스 이산화
-            rms_tensor = torch.tensor(rms, dtype=torch.float32)
-            mu_bins = RMS.get_mu_bins(
-                mu=self.mu_rms,
-                num_bins=self.rms_num_bins,
-                rms_min=self.rms_min
-            )
-            rms_classes = RMS.discretize_rms(rms_tensor, mu_bins).long()
+
+        # peak 분류 레이블 생성
+        if self.use_peak:
+            peak_classes = 
+
 
 
 
@@ -185,43 +174,63 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
             "text": text,
             "start_time": start_time,
             "end_time": end_time,
-            "rms": torch.tensor(rms), #
-            'rms_class': rms_classes,
+            "peak": torch.tensor(peak_array), #
+            'peak_class': torch.tensor(peak_classes, dtype=torch.long),
             "waveform": wav,
             "audio_sr": sr,
         }
         
-class FourierFeatures(nn.Module):
-    def __init__(self, in_features=1, out_features=12, std=1.0):
-        super().__init__()
-        assert out_features % 2 == 0
-        self.weight = nn.Parameter(torch.randn([out_features // 2, in_features]) * std)
-
-    def forward(self, x):
-        f = 2 * math.pi * x @ self.weight.T
-        return torch.cat([f.cos(), f.sin()], dim=-1)
-
 
 if __name__ == "__main__":
     dataset = GreatestHitsDataset(
-        root_dir="/mnt/HDD2/GreatestHits/preprocessed_15_5.0_(112, 112)_48000",
+        root_dir="/mnt/HDD2/GreatestHits/preprocessed_15_5.0_(320, 240)_48000",
         split_file_path="/mnt/HDD2/GreatestHits/data/train.txt",
         chunk_length_sec=5.0,
         image_size=(112, 112),
     )
     
     print("총 chunk 샘플:", len(dataset))
-    item = dataset[10]
+    item = dataset[100]
     print("frames:", item["frames"].shape)
     print("onset_times:", item["onset_times"])
     print("text:", item["text"])
     print("start/end:", item["start_time"], item["end_time"])
-    print("rms:", item["rms"])
-    print("rmsclass:", item["rms_class"])
+    print("peak:", item["peak"])
+    print("peakclass:", item["peak_class"])
     print("waveform:", item["waveform"].shape if item["waveform"] is not None else None)
                 
-    print('len rmsclass',len(item["rms_class"]))
+
     import matplotlib.pyplot as plt
-    
-    plt.plot(item["rms_class"])
-    plt.show()
+
+#     all_peak = []
+
+#     for i in range(len(dataset)):
+#         item = dataset[i]
+#         peak = item["peak"]
+#         peak = np.asarray(peak)
+#         all_peak.append(peak)
+
+#     all_peak = np.concatenate(all_peak)
+#     print(f"peak 값 shape: {all_peak.shape}")
+#     print(f"0 값 개수: {(all_peak==0).sum()}, 전체 대비 {(all_peak==0).mean()*100:.2f}%")
+
+#     # 원본 peak 분포
+#     plt.figure()
+#     plt.hist(all_peak, bins=100, log=True)
+#     plt.title("Peak Value Distribution (original)")
+#     plt.xlabel("peak")
+#     plt.ylabel("Count (log scale)")
+#     plt.grid()
+#     plt.show()
+
+#     # µ-law 인코딩 후 분포 (Librosa)
+#     import librosa
+#     mu = 255
+#     peak_mu = librosa.mu_compress(all_peak, mu=mu)
+#     plt.figure()
+#     plt.hist(peak_mu, bins=100, log=True)
+#     plt.title("Peak Value Distribution (after µ-law, mu=255)")
+#     plt.xlabel("mu-law encoded peak")
+#     plt.ylabel("Count (log scale)")
+#     plt.grid()
+# plt.show()
