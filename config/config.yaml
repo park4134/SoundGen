@@ -1,1 +1,19 @@
-hi: hi
+# config.yaml
+root_dir: /mnt/HDD2/GreatestHits/preprocessed_15_5.0_(112, 112)_48000
+train_split: /mnt/HDD2/GreatestHits/data/train.txt
+val_split: /mnt/HDD2/GreatestHits/data/val.txt
+
+batch_size: 16
+epochs: 20
+lr: 0.001
+pretrained: true
+use_onset: true
+save_dir: ./checkpoints_peaknet
+use_flow: False
+n_rms_classes: 64
+gls_blur_range: 8
+gls_sigma: 1
+
+
+rms_num_bins : 64
+rms_min : 0.01
