@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import torch
-from dataset import GreatestHitsDataset
 import os
 
 #############################
@@ -100,6 +99,7 @@ def save_flow_overlay_video(rgb_frames, hsvs, out_path="flow_overlay.mp4", alpha
 # MAIN (예시)
 #####################################
 if __name__ == '__main__':
+    from dataset import GreatestHitsDataset
     # 데이터셋 준비
     dataset = GreatestHitsDataset(
         root_dir="/mnt/HDD2/GreatestHits/preprocessed_15_5.0_(320,240)_48000",

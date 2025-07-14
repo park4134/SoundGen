@@ -1,8 +1,11 @@
+import sys
+sys.path.append('./')
+
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision.transforms as transforms
-from utils.opticalflow import extract_optical_flow_farneback_drumstick
-from utils.opticalflow import preprocess_optical_flow
+from opticalflow import extract_optical_flow_farneback_drumstick
 import os
 from glob import glob
 from natsort import natsorted
@@ -12,6 +15,7 @@ import json
 import torchaudio
 import librosa
 from preprocess.data_utils import RMS
+from torch.utils.data import DataLoader
 
 class GreatestHitsDataset(torch.utils.data.Dataset):
     def __init__(
@@ -126,7 +130,7 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         flow_tensor = torch.from_numpy(flow_np).permute(0, 3, 1, 2).float()  # (T, 2, H, W)
         
         onset_time_array = np.zeros(10, dtype=np.float32)
-         
+        
         
         onset = None
         if os.path.exists(sample["onset_path"]):
@@ -147,7 +151,7 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
                 idx = onset_indices[i]
                 time_sec = idx / 240000
                 onset_time_array[i] = time_sec
- 
+
 
         # rms 분류 레이블 생성
         if self.use_rms and os.path.exists(sample["rms_path"]):
@@ -191,6 +195,63 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
             "audio_sr": sr,
         }
         
+
+class GreatestHitsDatasetDummy(GreatestHitsDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+    def __getitem__(self, idx):
+        sample = self.samples[idx]
+
+        # --- 이미지 프레임 불러오기 ---
+        imgs = []
+        for img_path in sample["frames"]:
+            img = Image.open(img_path).convert('RGB')
+            img = self.transform(img)
+            imgs.append(img)
+
+        if len(imgs) > self.target_frame_len:
+            imgs = imgs[:self.target_frame_len]
+
+        imgs = torch.stack(imgs, dim=0)       # (T, C, H, W)
+        imgs = imgs.permute(1, 0, 2, 3)       # (C, T, H, W)
+
+        # --- 오디오 불러오기 ---
+        wav = None
+        if os.path.exists(sample["audio_path"]):
+            wav, sr = torchaudio.load(sample["audio_path"])
+            # wav = wav.unsqueeze(0) # shape: (1, 1, L)
+
+        # --- RMS 불러오기 ---
+        rms = None
+        if self.use_rms and os.path.exists(sample["rms_path"]):
+            rms = np.load(sample["rms_path"])
+            rms = torch.tensor(rms, dtype=torch.float32)
+            rms = rms.unsqueeze(0).unsqueeze(0) # shape: (1, 1, 1875)
+        
+        rms = F.interpolate(rms, size=240000, mode='linear', align_corners=False) # shape: (1, 1, L)
+        rms = rms.squeeze(0)
+        
+        if os.path.exists(sample["meta_path"]):
+            with open(sample["meta_path"], "r") as f:
+                meta = json.load(f)
+            prompt = meta.get("prompt", "")
+            start_time = meta.get("seconds_start", 0.0)
+            end_time = meta.get("seconds_total", 0.0)
+
+        return {
+            "frames": imgs,      # (C, T, H, W)
+            "waveform": wav,     # (1, 1, L)
+            "rms": rms,          # (1, 1, L)
+            "prompt": prompt,
+            "start_time": start_time,
+            "end_time": end_time
+        }
+
 class FourierFeatures(nn.Module):
     def __init__(self, in_features=1, out_features=12, std=1.0):
         super().__init__()
@@ -203,25 +264,30 @@ class FourierFeatures(nn.Module):
 
 
 if __name__ == "__main__":
-    dataset = GreatestHitsDataset(
-        root_dir="/mnt/HDD2/GreatestHits/preprocessed_15_5.0_(112, 112)_48000",
-        split_file_path="/mnt/HDD2/GreatestHits/data/train.txt",
+    # dataset = GreatestHitsDataset(
+    dataset = GreatestHitsDatasetDummy(
+        root_dir="./data/greatest_hits/preprocessed_15_5.0_(112, 112)_48000",
+        split_file_path="./data/greatest_hits/train.txt",
         chunk_length_sec=5.0,
         image_size=(112, 112),
     )
     
-    print("총 chunk 샘플:", len(dataset))
-    item = dataset[10]
-    print("frames:", item["frames"].shape)
-    print("onset_times:", item["onset_times"])
-    print("text:", item["text"])
-    print("start/end:", item["start_time"], item["end_time"])
-    print("rms:", item["rms"])
-    print("rmsclass:", item["rms_class"])
-    print("waveform:", item["waveform"].shape if item["waveform"] is not None else None)
-                
-    print('len rmsclass',len(item["rms_class"]))
-    import matplotlib.pyplot as plt
+    # print("총 chunk 샘플:", len(dataset))
+    # item = dataset[10]
+    # print("frames:", item["frames"].shape)
+    # print("rms:", item["rms"].shape)
+    # print("waveform:", item["waveform"].shape if item["waveform"] is not None else None)
+    # print("prompt:", item["prompt"])
+    # print("start_time:", item["start_time"])
+    # print("end_time:", item["end_time"])
     
-    plt.plot(item["rms_class"])
-    plt.show()
+    dataloader = DataLoader(dataset, batch_size=8)
+    for batch in dataloader:
+        frames = batch["frames"]
+        audio = batch["waveform"]
+        rms = batch["rms"]
+        prompt = batch["prompt"]
+        start_time = batch["start_time"]
+        end_time = batch["end_time"]
+        print(frames.shape, audio.shape, rms.shape, prompt, start_time, end_time)
+        break

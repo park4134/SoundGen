@@ -48,6 +48,7 @@ import torch.nn as nn
 from models.stage1.resnet import r2plus1d_18
 from utils.opticalflow import preprocess_optical_flow
 
+# https://github.com/mcomunita/syncfusion/blob/master/main/onset_net.py
 class R2plus1d18KeepTemp(nn.Module):
     def __init__(self, pretrained=True):
         super().__init__()
