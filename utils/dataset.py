@@ -71,6 +71,7 @@ class GreatestHitsDataset(torch.utils.data.Dataset):
         self.samples = []
         
         for video_name in self.video_names:
+        # for video_name in self.video_names[:4]:
             video_base_dir = os.path.join(root_dir, video_name)
             chunk_dirs = natsorted(glob(os.path.join(video_base_dir, "chunk_*")))
 
