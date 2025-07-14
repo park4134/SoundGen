@@ -130,6 +130,8 @@ class Trainer():
                 noise = torch.randn_like(audio)
                 noised_audio = self.q_sample(audio, t, noise, self.alphas_cumprod)
 
+                noised_audio = self.model_stg2.pretransform.encode(noised_audio.repeat(1, 2, 1))
+
                 conditioning = [{
                     "envelope": rms[i].to(self.device),
                     "image_feature": image_feat[i].unsqueeze(1).to(self.device),
@@ -146,6 +148,9 @@ class Trainer():
                     device=self.device,
                     return_loss=False
                 )
+
+                pred_noise = self.model_stg2.pretransform.decode(pred_noise)
+                print(pred_noise.shape)
 
                 loss = torch.nn.functional.mse_loss(pred_noise, noise)
                 total_loss += loss.item()
@@ -187,15 +192,13 @@ class Trainer():
                 # Get image feature & RMS envelope from Stage1 model
                 with torch.no_grad():
                     image_feat = self.model_stg1(frames)
-
+                    x0 = self.model_stg2.pretransform.encode(audio.repeat(1, 2, 1))
+                
                 # Generate random noised audio
+                noise = torch.randn_like(x0)
                 B = audio.shape[0]
                 t = torch.randint(0, self.args.timesteps, (B,), device=self.device)  # (B,)
-                noise = torch.randn_like(audio)  # (B, 1, L)
-                noised_audio = self.q_sample(audio, t, noise, self.alphas_cumprod)  # (B, 1, L)
-
-                # Pretransform
-                noised_audio = self.model_stg2.pretransform.encode(noised_audio.repeat(1, 2, 1))
+                noised_latent = self.q_sample(x0, t, noise, self.alphas_cumprod)  # (B, 1, L)
 
                 # Conditioning for ControlNet
                 conditioning = [{
@@ -208,13 +211,11 @@ class Trainer():
 
                 # model_stg2가 loss를 반환하는 형태라고 가정
                 pred_noise = self.model_stg2(
-                    x=noised_audio,
+                    x=noised_latent,
                     t=t.to(self.device),
                     cond=self.model_stg2.conditioner(conditioning, device=self.device),
                     cfg_dropout_prob=0.2,)
                     # device=self.device)
-                
-                pred_noise = self.model_stg2.pretransform.decode(pred_noise)
 
                 loss = torch.nn.functional.mse_loss(pred_noise, noise)
 

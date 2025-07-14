@@ -8,10 +8,8 @@
 dev.ipynb
 
 # cache file
-*/__pycache__
+**/__pycache__
 
 /stable_audio_controlnet
 
 /results
-
-*/__pycache__
